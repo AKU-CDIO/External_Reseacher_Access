@@ -1,25 +1,19 @@
 # ============================================================================
 # Example 2: SQL JOIN + Demographics
 #
-# Usage:
-#   conn <- fabric_connect(auth = "sp_vault")     # ODBC SQL via Key Vault
-#   conn <- fabric_connect(auth = "device_code")  # OneLake Delta Lake
-#
-# Prerequisites:
-#   install.packages(c("httr", "jsonlite", "odbc", "DBI"))
-#   remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect")
+# Any auth method works — the exploration helpers detect the connection type.
 # ============================================================================
 
 rm(list = ls())
 source("fabric_connect.R")
 
-# Choose your auth path:
+# Choose your auth:
 conn <- fabric_connect(auth = "sp_vault")
 # conn <- fabric_connect(auth = "device_code")
 
-# ---- SQL JOIN: Sleep summary per participant ----
+# SQL JOIN: Sleep summary per participant
 cat("Sleep summary per participant (top 10):\n\n")
-result <- dbGetQuery(conn, "
+result <- fabric_query(conn, "
   SELECT p.ParticipantIdentifier, p.Gender, p.Age,
          COUNT(*) AS sleep_logs,
          AVG(s.MinutesAsleep) AS avg_min_asleep,
@@ -32,9 +26,9 @@ result <- dbGetQuery(conn, "
 ")
 print(head(result, 10))
 
-# ---- Demographics ----
+# Demographics
 cat("\nDemographics:\n\n")
-demo <- dbGetQuery(conn, "
+demo <- fabric_query(conn, "
   SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age,
          MIN(Age) AS min_age, MAX(Age) AS max_age
   FROM dbo.dimenrolledparticipants
@@ -43,5 +37,5 @@ demo <- dbGetQuery(conn, "
 ")
 print(demo)
 
-dbDisconnect(conn)
+fabric_disconnect(conn)
 cat("\nDone.\n")

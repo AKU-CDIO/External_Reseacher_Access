@@ -4,7 +4,9 @@ Access UZIMA study data from Microsoft Fabric on your personal machine.
 
 > **No repo clone needed.** Copy any code block below and run it.
 
-## Prerequisites
+---
+
+## Step 1: Install
 
 ### Python
 ```bash
@@ -19,119 +21,105 @@ remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect
 
 ---
 
-## Choose Your Auth Path
+## Step 2: Authenticate
 
-| | **`auth = "sp_vault"`** | **`auth = "device_code"`** |
-|---|---|---|
-| **Best for** | Full control, explicit flow | Simple, hands-off |
-| **Steps** | 4-step chain | 1-step browser login |
-| **Access** | ODBC SQL (full T-SQL) | OneLake Delta Lake |
-| **Requires** | `httr`, `jsonlite`, `odbc`, `DBI`, `fabriconnect` | `fabricpy` (Python) or `fabriconnect` (R) |
-| **SQL Support** | Full T-SQL via ODBC | Limited (via duckdb) |
+Pick **one** method that works for you:
 
----
-
-## R — Quick Start
+### R — Pick a method
 
 ```r
 source("fabric_connect.R")
 
-# Choose your auth path:
-conn <- fabric_connect(auth = "sp_vault")      # ODBC SQL via Key Vault
-# conn <- fabric_connect(auth = "device_code") # OneLake Delta Lake
-
-# Query
-dbGetQuery(conn, "SELECT COUNT(*) AS total FROM dbo.dimenrolledparticipants")
-dbDisconnect(conn)
-```
-
-## R — Full Example
-
-```r
-# install.packages(c("httr", "jsonlite", "odbc", "DBI"))
-# remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
-
-library(httr)
-library(jsonlite)
-library(odbc)
-library(DBI)
-library(fabriconnect)
-
-fabric_connect <- function(
-  auth      = c("sp_vault", "device_code"),
-  database  = "uzima_db_backup",
-  vault_url = "https://uzima-secrets-xfmh.vault.azure.net",
-  server    = "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
-) {
-  auth <- match.arg(auth)
-
-  # Step 1: Device code → browser login → get token
-  cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
-  token <- fabriconnect:::.get_fabric_token(cfg$fabric_tenant)
-
-  if (auth == "device_code") {
-    return(connect_to_fabric())
-  }
-
-  # Step 2: Token → Key Vault → get SP credentials
-  fetch_secret <- function(name) {
-    url <- paste0(vault_url, "/secrets/", name, "?api-version=7.4")
-    resp <- GET(url, add_headers(Authorization = paste("Bearer", token)))
-    stop_for_status(resp)
-    content(resp)$value
-  }
-
-  tenant_id     <- fetch_secret("fabric-sp-tenant-id")
-  client_id     <- fetch_secret("fabric-sp-client-id")
-  client_secret <- fetch_secret("fabric-sp-client-secret")
-
-  # Step 3: SP credentials → SQL token
-  resp <- POST(
-    paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token"),
-    body = list(grant_type = "client_credentials", client_id = client_id,
-                client_secret = client_secret, scope = "https://database.windows.net/.default"),
-    encode = "form"
-  )
-  stop_for_status(resp)
-  sql_token <- content(resp)$access_token
-
-  # Step 4: SQL token → ODBC connection
-  dbConnect(
-    odbc::odbc(),
-    Driver = "ODBC Driver 18 for SQL Server",
-    Server = paste0(server, ",1433"),
-    Database = database,
-    UID = 1, AccessToken = sql_token,
-    Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30
-  )
-}
-
-# Usage
+# Option A: SP + Key Vault (recommended — full SQL access)
 conn <- fabric_connect(auth = "sp_vault")
-dbGetQuery(conn, "SELECT COUNT(*) AS total FROM dbo.dimenrolledparticipants")
-dbDisconnect(conn)
+
+# Option B: Device Code only (simpler — browser login)
+conn <- fabric_connect(auth = "device_code")
+
+# Option C: Existing token (if you already have one)
+conn <- fabric_connect(auth = "token", token = "eyJ...")
 ```
 
----
-
-## Python
+### Python — Pick a method
 
 ```python
 from fabricpy import FabricLakehouse
 
+# Option A: Device Code (browser login)
 lh = FabricLakehouse()
 
-# List tables
+# Option B: Existing token
+lh = FabricLakehouse(access_token="eyJ...")
+```
+
+| Method | What happens | Best for |
+|--------|--------------|----------|
+| `sp_vault` | Browser login → Key Vault → SP → ODBC | Full SQL access |
+| `device_code` | Browser login → OneLake | Simple, quick |
+| `token` | Skip login, use your own token | Automation, sharing |
+
+---
+
+## Step 3: Explore Data
+
+These examples work **regardless** of which auth method you chose.
+
+### List Tables
+
+**R:**
+```r
+tables <- fabric_list_tables(conn)
+print(tables)
+```
+
+**Python:**
+```python
 tables = lh.list_tables()
 print(tables)
+```
 
-# Read a table
+### Read a Table
+
+**R:**
+```r
+df <- fabric_read_table(conn, "dimenrolledparticipants")
+head(df)
+```
+
+**Python:**
+```python
 df = lh.to_pandas("dimenrolledparticipants")
 print(df.head())
+```
 
-# SQL query
-result = lh.sql("SELECT COUNT(*) AS total FROM dimenrolledparticipants")
+### Run SQL
+
+**R:**
+```r
+result <- fabric_query(conn, "
+  SELECT Gender, COUNT(*) AS total
+  FROM dbo.dimenrolledparticipants
+  GROUP BY Gender
+")
 print(result)
+```
+
+**Python:**
+```python
+result = lh.sql("SELECT Gender, COUNT(*) AS total FROM dimenrolledparticipants GROUP BY Gender")
+print(result)
+```
+
+### Disconnect
+
+**R:**
+```r
+fabric_disconnect(conn)
+```
+
+**Python:**
+```python
+# No disconnect needed — Python handles cleanup automatically
 ```
 
 ---
@@ -144,17 +132,28 @@ print(result)
 | `HCW_fitbit_data` | 5 | HCW fitbit activity logs |
 | `Qualtrics` | 1 | HCW student survey |
 
-**R:** `fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")`
-**Python:** `lh = FabricLakehouse(lakehouse="HCW_fitbit_data")`
+**Switch database in R:**
+```r
+conn <- fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")
+# or
+conn <- fabric_connect(auth = "device_code", lakehouse = "HCW_fitbit_data")
+```
+
+**Switch database in Python:**
+```python
+lh = FabricLakehouse(lakehouse="HCW_fitbit_data")
+```
+
+---
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| Browser doesn't open | Run the script again — device code will re-issue |
+| Browser doesn't open | Run the script again — it will re-issue a device code |
 | "Access denied" | Contact derick.imbati@aku.edu to get whitelisted |
 | Install fails | Wait and retry (GitHub rate limit) |
-| `rm(list = ls())` warning | Safe to ignore — clears old functions that mask package versions |
+| `rm(list = ls())` warning | Safe to ignore — clears old functions |
 
 ## Support
 

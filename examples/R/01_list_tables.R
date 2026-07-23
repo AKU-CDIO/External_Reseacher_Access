@@ -1,25 +1,19 @@
 # ============================================================================
 # Example 1: Connect + List Tables
 #
-# Usage:
-#   conn <- fabric_connect(auth = "sp_vault")     # ODBC SQL via Key Vault
-#   conn <- fabric_connect(auth = "device_code")  # OneLake Delta Lake
-#
-# Prerequisites:
-#   install.packages(c("httr", "jsonlite", "odbc", "DBI"))
-#   remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect")
+# Any auth method works — the exploration helpers detect the connection type.
 # ============================================================================
 
 rm(list = ls())
 source("fabric_connect.R")
 
-# Choose your auth path:
+# Choose your auth:
 conn <- fabric_connect(auth = "sp_vault")
 # conn <- fabric_connect(auth = "device_code")
 
-# List tables
-tables <- dbGetQuery(conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME")
-cat("Tables found:", nrow(tables), "\n")
+# List tables (works with any connection)
+tables <- fabric_list_tables(conn)
+cat("Tables found:", length(tables), "\n")
 print(tables)
 
-dbDisconnect(conn)
+fabric_disconnect(conn)

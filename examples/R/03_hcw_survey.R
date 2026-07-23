@@ -1,35 +1,28 @@
 # ============================================================================
 # Example 3: HCW Student Survey Analysis
 #
-# Usage:
-#   conn <- fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")
-#   conn <- fabric_connect(auth = "device_code")
-#
-# Prerequisites:
-#   install.packages(c("httr", "jsonlite", "odbc", "DBI", "dplyr"))
-#   remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect")
+# Any auth method works — the exploration helpers detect the connection type.
 # ============================================================================
 
 rm(list = ls())
 source("fabric_connect.R")
 library(dplyr)
 
-# Choose your auth path + database:
+# Choose your auth + database:
 conn <- fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")
-# conn <- fabric_connect(auth = "device_code")
+# conn <- fabric_connect(auth = "device_code", lakehouse = "HCW_fitbit_data")
 
-# ---- Read HCW Student Survey ----
+# Read HCW Student Survey
 cat("Reading Qualtrics HCW Student Survey...\n\n")
-baseline <- dbReadTable(conn, "dbo.Qualtrics_HCW_Student_Survey_View")
+baseline <- fabric_read_table(conn, "qualtrics_hcw_student_survey")
 cat("Rows:", nrow(baseline), " Cols:", ncol(baseline), "\n")
 
-# ---- Filter consented participants ----
+# Filter consented participants
 if ("Consent3" %in% names(baseline)) {
   baseline_filtered <- baseline %>%
     filter(Consent3 == 1)
   cat("Consented:", nrow(baseline_filtered), "participants\n\n")
 
-  # Descriptives
   cat("Age summary:\n")
   print(summary(baseline_filtered$Age))
 
@@ -40,5 +33,5 @@ if ("Consent3" %in% names(baseline)) {
   print(names(baseline))
 }
 
-dbDisconnect(conn)
+fabric_disconnect(conn)
 cat("\nDone.\n")

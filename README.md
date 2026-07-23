@@ -21,35 +21,102 @@ remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect
 
 ## Choose Your Auth Path
 
-| | **Path A: SP + Key Vault** | **Path B: Device Code Only** |
+| | **`auth = "sp_vault"`** | **`auth = "device_code"`** |
 |---|---|---|
 | **Best for** | Full control, explicit flow | Simple, hands-off |
-| **Steps** | 4-step chain (see below) | 1-step browser login |
-| **Access** | ODBC SQL (full SQL Server) | OneLake Delta Lake |
+| **Steps** | 4-step chain | 1-step browser login |
+| **Access** | ODBC SQL (full T-SQL) | OneLake Delta Lake |
 | **Requires** | `httr`, `jsonlite`, `odbc`, `DBI`, `fabriconnect` | `fabricpy` (Python) or `fabriconnect` (R) |
 | **SQL Support** | Full T-SQL via ODBC | Limited (via duckdb) |
 
 ---
 
-## Path A: SP + Key Vault (Explicit 4-Step Chain)
+## R — Quick Start
 
+```r
+source("fabric_connect.R")
+
+# Choose your auth path:
+conn <- fabric_connect(auth = "sp_vault")      # ODBC SQL via Key Vault
+# conn <- fabric_connect(auth = "device_code") # OneLake Delta Lake
+
+# Query
+dbGetQuery(conn, "SELECT COUNT(*) AS total FROM dbo.dimenrolledparticipants")
+dbDisconnect(conn)
 ```
-Device Code (browser)  →  Key Vault  →  Service Principal  →  ODBC SQL
-     Step 1                 Step 2           Step 3              Step 4
+
+## R — Full Example
+
+```r
+# install.packages(c("httr", "jsonlite", "odbc", "DBI"))
+# remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
+
+library(httr)
+library(jsonlite)
+library(odbc)
+library(DBI)
+library(fabriconnect)
+
+fabric_connect <- function(
+  auth      = c("sp_vault", "device_code"),
+  database  = "uzima_db_backup",
+  vault_url = "https://uzima-secrets-xfmh.vault.azure.net",
+  server    = "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
+) {
+  auth <- match.arg(auth)
+
+  # Step 1: Device code → browser login → get token
+  cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
+  token <- fabriconnect:::.get_fabric_token(cfg$fabric_tenant)
+
+  if (auth == "device_code") {
+    return(connect_to_fabric())
+  }
+
+  # Step 2: Token → Key Vault → get SP credentials
+  fetch_secret <- function(name) {
+    url <- paste0(vault_url, "/secrets/", name, "?api-version=7.4")
+    resp <- GET(url, add_headers(Authorization = paste("Bearer", token)))
+    stop_for_status(resp)
+    content(resp)$value
+  }
+
+  tenant_id     <- fetch_secret("fabric-sp-tenant-id")
+  client_id     <- fetch_secret("fabric-sp-client-id")
+  client_secret <- fetch_secret("fabric-sp-client-secret")
+
+  # Step 3: SP credentials → SQL token
+  resp <- POST(
+    paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token"),
+    body = list(grant_type = "client_credentials", client_id = client_id,
+                client_secret = client_secret, scope = "https://database.windows.net/.default"),
+    encode = "form"
+  )
+  stop_for_status(resp)
+  sql_token <- content(resp)$access_token
+
+  # Step 4: SQL token → ODBC connection
+  dbConnect(
+    odbc::odbc(),
+    Driver = "ODBC Driver 18 for SQL Server",
+    Server = paste0(server, ",1433"),
+    Database = database,
+    UID = 1, AccessToken = sql_token,
+    Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30
+  )
+}
+
+# Usage
+conn <- fabric_connect(auth = "sp_vault")
+dbGetQuery(conn, "SELECT COUNT(*) AS total FROM dbo.dimenrolledparticipants")
+dbDisconnect(conn)
 ```
 
-| Step | What Happens | Why |
-|------|--------------|-----|
-| 1 | Browser opens → sign in with your email | MFA + external identity |
-| 2 | Token fetches SP creds from Key Vault | Secrets never leave Azure |
-| 3 | SP creds → SQL access token | Fabric SQL endpoint auth |
-| 4 | SQL token → ODBC connection | Query data with standard SQL |
+---
 
-### Path A — Python
+## Python
 
 ```python
-# pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbound-access.git#subdirectory=fabriconnectpy"
-
 from fabricpy import FabricLakehouse
 
 lh = FabricLakehouse()
@@ -67,104 +134,6 @@ result = lh.sql("SELECT COUNT(*) AS total FROM dimenrolledparticipants")
 print(result)
 ```
 
-### Path A — R
-
-```r
-# install.packages(c("httr", "jsonlite", "odbc", "DBI"))
-# remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
-
-library(httr)
-library(jsonlite)
-library(odbc)
-library(DBI)
-library(fabriconnect)
-
-# ---- Config ----
-VAULT_URL <- "https://uzima-secrets-xfmh.vault.azure.net"
-SERVER    <- "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
-DATABASE  <- "uzima_db_backup"
-
-# Step 1: Device code → browser login → get token
-cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
-token <- fabriconnect:::.get_fabric_token(cfg$fabric_tenant)
-
-# Step 2: Token → Key Vault → get SP credentials
-fetch_secret <- function(name) {
-  url <- paste0(VAULT_URL, "/secrets/", name, "?api-version=7.4")
-  resp <- GET(url, add_headers(Authorization = paste("Bearer", token)))
-  stop_for_status(resp)
-  content(resp)$value
-}
-
-tenant_id     <- fetch_secret("fabric-sp-tenant-id")
-client_id     <- fetch_secret("fabric-sp-client-id")
-client_secret <- fetch_secret("fabric-sp-client-secret")
-
-# Step 3: SP credentials → SQL token
-resp <- POST(
-  paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token"),
-  body = list(grant_type = "client_credentials", client_id = client_id,
-              client_secret = client_secret, scope = "https://database.windows.net/.default"),
-  encode = "form"
-)
-stop_for_status(resp)
-sql_token <- content(resp)$access_token
-
-# Step 4: SQL token → ODBC connection
-con <- dbConnect(
-  odbc::odbc(),
-  Driver = "ODBC Driver 18 for SQL Server",
-  Server = paste0(SERVER, ",1433"),
-  Database = DATABASE,
-  UID = 1, AccessToken = sql_token,
-  Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30
-)
-
-# Query
-dbGetQuery(con, "SELECT COUNT(*) AS total FROM dbo.dimenrolledparticipants")
-dbDisconnect(con)
-```
-
----
-
-## Path B: Device Code Only (Simple)
-
-### Path B — Python
-
-```python
-from fabricpy import FabricLakehouse
-
-lh = FabricLakehouse()
-
-# List tables
-tables = lh.list_tables()
-print(tables)
-
-# Read a table
-df = lh.to_pandas("dimenrolledparticipants")
-print(df.head())
-```
-
-### Path B — R
-
-```r
-library(fabriconnect)
-
-conn <- connect_to_fabric()
-
-# List tables
-tables <- list_tables(conn)
-print(tables)
-
-# Read a table
-df <- read_table(conn, "dimenrolledparticipants")
-print(head(df))
-
-# SQL query (via duckdb)
-result <- query_tables(conn, "SELECT COUNT(*) AS total FROM dimenrolledparticipants")
-print(result)
-```
-
 ---
 
 ## Available Data
@@ -175,8 +144,8 @@ print(result)
 | `HCW_fitbit_data` | 5 | HCW fitbit activity logs |
 | `Qualtrics` | 1 | HCW student survey |
 
-**Path A:** Change `Database = "HCW_fitbit_data"` in the connection.
-**Path B:** Change `connect_to_fabric(lakehouse = "HCW_fitbit_data")`.
+**R:** `fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")`
+**Python:** `lh = FabricLakehouse(lakehouse="HCW_fitbit_data")`
 
 ## Troubleshooting
 

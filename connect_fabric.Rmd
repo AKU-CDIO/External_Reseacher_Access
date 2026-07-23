@@ -14,17 +14,19 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```r
 install.packages(c("httr", "jsonlite", "odbc", "DBI"))
 remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
+remotes::install_github("AKU-CDIO/External_Reseacher_Access", ref = "feature/uzima-package")
 ```
 
 ## Authenticate
 
 ```{r connect}
 rm(list = ls())
-source("fabric_connect.R")
+library(UZIMA)
 
 # Pick one:
 conn <- fabric_connect(auth = "sp_vault")
 # conn <- fabric_connect(auth = "device_code")
+# conn <- fabric_connect(auth = "env")
 ```
 
 ## List Tables

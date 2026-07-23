@@ -17,6 +17,7 @@ pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbou
 ```r
 install.packages(c("httr", "jsonlite", "odbc", "DBI"))
 remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
+remotes::install_github("AKU-CDIO/External_Reseacher_Access", ref = "feature/uzima-package")
 ```
 
 ---
@@ -28,7 +29,7 @@ Pick **one** method that works for you:
 ### R — Pick a method
 
 ```r
-source("fabric_connect.R")
+library(UZIMA)
 
 # Option A: SP + Key Vault (recommended — full SQL access)
 conn <- fabric_connect(auth = "sp_vault")

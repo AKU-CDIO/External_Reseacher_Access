@@ -1,0 +1,164 @@
+#' Connect to UZIMA Fabric Data
+#'
+#' Authenticates to Microsoft Fabric and returns a connection object.
+#' Supports multiple authentication methods.
+#'
+#' @param auth Authentication method: "sp_vault", "device_code", "token", or "env"
+#' @param token Access token (required when auth = "token")
+#' @param database Database name (default: "uzima_db_backup")
+#' @param vault_url Key Vault URL
+#' @param server Fabric SQL server
+#' @param lakehouse Lakehouse name (for device_code auth)
+#' @param env_var Environment variable name (for env auth)
+#' @return A database connection (DBIConnection) or Fabric connection (fabric_connection)
+#' @export
+fabric_connect <- function(
+  auth       = c("sp_vault", "device_code", "token", "env"),
+  token      = NULL,
+  database   = "uzima_db_backup",
+  vault_url  = "https://uzima-secrets-xfmh.vault.azure.net",
+  server     = "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com",
+  lakehouse  = NULL,
+  env_var    = c("FABRIC_ACCESS_TOKEN", "FABRIC_DELEGATED_ACCESS_TOKEN", "AZURE_ACCESS_TOKEN")
+) {
+  auth <- match.arg(auth)
+  env_var <- match.arg(env_var)
+
+  if (auth == "token") {
+    if (is.null(token)) stop("token = required when auth = 'token'")
+    return(fabriconnect::connect_to_fabric(access_token = token))
+  }
+
+  if (auth == "env") {
+    token_val <- Sys.getenv(env_var, unset = "")
+    if (!nzchar(token_val)) {
+      stop("Environment variable '", env_var, "' is not set.")
+    }
+    return(fabriconnect::connect_to_fabric(access_token = token_val))
+  }
+
+  # Device code → browser login → get OneLake token
+  cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
+  onelake_token <- fabriconnect:::.get_fabric_token(cfg$fabric_tenant)
+
+  if (auth == "device_code") {
+    if (!is.null(lakehouse)) {
+      return(fabriconnect::connect_to_fabric(lakehouse = lakehouse))
+    }
+    return(fabriconnect::connect_to_fabric())
+  }
+
+  # auth == "sp_vault"
+  # Step 2: Token → Key Vault → get SP credentials
+  fetch_secret <- function(name) {
+    url <- paste0(vault_url, "/secrets/", name, "?api-version=7.4")
+    resp <- httr::GET(url, httr::add_headers(Authorization = paste("Bearer", onelake_token)))
+    httr::stop_for_status(resp)
+    httr::content(resp)$value
+  }
+
+  tenant_id     <- fetch_secret("fabric-sp-tenant-id")
+  client_id     <- fetch_secret("fabric-sp-client-id")
+  client_secret <- fetch_secret("fabric-sp-client-secret")
+
+  # Step 3: SP credentials → SQL token
+  resp <- httr::POST(
+    paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token"),
+    body = list(
+      grant_type    = "client_credentials",
+      client_id     = client_id,
+      client_secret = client_secret,
+      scope         = "https://database.windows.net/.default"
+    ),
+    encode = "form"
+  )
+  httr::stop_for_status(resp)
+  sql_token <- httr::content(resp)$access_token
+
+  # Step 4: SQL token → ODBC connection
+  con <- DBI::dbConnect(
+    odbc::odbc(),
+    Driver      = "ODBC Driver 18 for SQL Server",
+    Server      = paste0(server, ",1433"),
+    Database    = database,
+    UID         = 1,
+    AccessToken = sql_token,
+    Encrypt     = "yes",
+    TrustServerCertificate = "no",
+    Timeout     = 30
+  )
+
+  attr(con, "auth_type") <- "sp_vault"
+  con
+}
+
+#' List Tables
+#'
+#' Lists all tables in the connected database.
+#' Works with both DBI and fabric_connection objects.
+#'
+#' @param conn Connection object from fabric_connect()
+#' @return Character vector of table names
+#' @export
+fabric_list_tables <- function(conn) {
+  if (inherits(conn, "DBIConnection")) {
+    result <- DBI::dbGetQuery(conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME")
+    result$TABLE_NAME
+  } else if (inherits(conn, "fabric_connection")) {
+    fabriconnect::list_tables(conn)
+  } else {
+    stop("Unknown connection type")
+  }
+}
+
+#' Read Table
+#'
+#' Reads a table into a data frame.
+#' Works with both DBI and fabric_connection objects.
+#'
+#' @param conn Connection object from fabric_connect()
+#' @param table_name Name of the table to read
+#' @return Data frame with table data
+#' @export
+fabric_read_table <- function(conn, table_name) {
+  if (inherits(conn, "DBIConnection")) {
+    DBI::dbReadTable(conn, paste0("dbo.", table_name))
+  } else if (inherits(conn, "fabric_connection")) {
+    fabriconnect::read_table(conn, table_name)
+  } else {
+    stop("Unknown connection type")
+  }
+}
+
+#' Run SQL Query
+#'
+#' Executes a SQL query and returns results.
+#' Works with both DBI and fabric_connection objects.
+#'
+#' @param conn Connection object from fabric_connect()
+#' @param sql SQL query string
+#' @return Data frame with query results
+#' @export
+fabric_query <- function(conn, sql) {
+  if (inherits(conn, "DBIConnection")) {
+    DBI::dbGetQuery(conn, sql)
+  } else if (inherits(conn, "fabric_connection")) {
+    fabriconnect::query_tables(conn, sql)
+  } else {
+    stop("Unknown connection type")
+  }
+}
+
+#' Disconnect
+#'
+#' Closes the database connection.
+#'
+#' @param conn Connection object from fabric_connect()
+#' @return Invisible NULL
+#' @export
+fabric_disconnect <- function(conn) {
+  if (inherits(conn, "DBIConnection")) {
+    DBI::dbDisconnect(conn)
+  }
+  invisible(NULL)
+}

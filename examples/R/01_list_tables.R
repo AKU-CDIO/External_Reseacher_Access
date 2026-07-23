@@ -5,11 +5,12 @@
 # ============================================================================
 
 rm(list = ls())
-source("fabric_connect.R")
+library(UZIMA)
 
 # Choose your auth:
 conn <- fabric_connect(auth = "sp_vault")
 # conn <- fabric_connect(auth = "device_code")
+# conn <- fabric_connect(auth = "env")
 
 # List tables (works with any connection)
 tables <- fabric_list_tables(conn)

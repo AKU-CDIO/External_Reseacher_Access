@@ -5,12 +5,13 @@
 # ============================================================================
 
 rm(list = ls())
-source("fabric_connect.R")
+library(UZIMA)
 library(dplyr)
 
 # Choose your auth + database:
 conn <- fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")
 # conn <- fabric_connect(auth = "device_code", lakehouse = "HCW_fitbit_data")
+# conn <- fabric_connect(auth = "env", database = "HCW_fitbit_data")
 
 # Read HCW Student Survey
 cat("Reading Qualtrics HCW Student Survey...\n\n")

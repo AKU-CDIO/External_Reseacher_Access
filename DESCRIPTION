@@ -1,0 +1,17 @@
+Package: UZIMA
+Title: UZIMA External Researcher Data Access
+Version: 0.1.0
+Authors@R: person("Derick", "Imbati", email = "derick.imbati@aku.edu", role = c("aut", "cre"))
+Description: Connection helpers and examples for accessing UZIMA Fabric data
+    from Microsoft Fabric. Supports multiple authentication methods including
+    Service Principal with Key Vault, device code flow, and environment variables.
+License: MIT
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Imports:
+    httr,
+    jsonlite,
+    odbc,
+    DBI,
+    fabriconnect

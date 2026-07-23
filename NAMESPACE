@@ -1,0 +1,5 @@
+export(fabric_connect)
+export(fabric_list_tables)
+export(fabric_read_table)
+export(fabric_query)
+export(fabric_disconnect)

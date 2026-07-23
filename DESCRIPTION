@@ -1,0 +1,6 @@
+Package: UZIMA
+Title: UZIMA External Researcher Data Access
+Version: 0.1.0
+Description: Connection helpers and examples for accessing UZIMA Fabric data.
+License: MIT
+Encoding: UTF-8

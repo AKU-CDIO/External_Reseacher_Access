@@ -5,7 +5,7 @@
 # ============================================================================
 
 rm(list = ls())
-source("fabric_connect.R")
+library(UZIMA)
 library(dplyr)
 
 # Choose your auth + database:

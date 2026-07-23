@@ -5,7 +5,7 @@
 # ============================================================================
 
 rm(list = ls())
-source("fabric_connect.R")
+library(UZIMA)
 
 # Choose your auth:
 conn <- fabric_connect(auth = "sp_vault")

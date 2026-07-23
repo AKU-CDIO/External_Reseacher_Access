@@ -17,11 +17,9 @@ install.packages(c("httr", "jsonlite", "odbc", "DBI", "dplyr", "processx"))
 
 Also install **ODBC Driver 18** for SQL Server and **Azure CLI** (`az`).
 
-## Connect
+## Define connection function
 
-Run this chunk — it uses your `az login` session automatically.
-
-```{r connect}
+```{r define}
 library(httr)
 library(jsonlite)
 library(odbc)
@@ -62,7 +60,13 @@ connect_to_fabric <- function() {
             UID = 1, AccessToken = content(resp)$access_token,
             Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30)
 }
+```
 
+## Connect
+
+Run this chunk — a browser window opens for login.
+
+```{r connect}
 con <- connect_to_fabric()
 cat("Connected!\n")
 ```
@@ -77,7 +81,7 @@ knitr::kable(tables)
 ## Read Data
 
 ```{r read-data}
-df <- dbGetQuery(con, "SELECT TOP 10 * FROM dbo.DimEnrolledParticipants")
+df <- dbGetQuery(con, "SELECT TOP 10 * FROM dbo.dimenrolledparticipants")
 knitr::kable(df)
 ```
 
@@ -86,7 +90,7 @@ knitr::kable(df)
 ```{r sql}
 result <- dbGetQuery(con, "
   SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age
-  FROM dbo.DimenrolledParticipants
+  FROM dbo.dimenrolledparticipants
   WHERE Gender IS NOT NULL
   GROUP BY Gender
 ")

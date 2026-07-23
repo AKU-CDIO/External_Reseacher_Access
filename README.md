@@ -15,7 +15,7 @@ pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbou
 
 ### R
 ```r
-install.packages(c("httr", "jsonlite", "odbc", "DBI"))
+install.packages(c("httr", "jsonlite", "odbc", "DBI", "processx"))
 remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
 remotes::install_github("AKU-CDIO/External_Reseacher_Access", ref = "feature/uzima-package")
 ```
@@ -24,29 +24,26 @@ remotes::install_github("AKU-CDIO/External_Reseacher_Access", ref = "feature/uzi
 
 ## Step 2: Authenticate
 
-Pick **one** method that works for you:
+Pick **one** method:
 
-### R — Pick a method
-
+### R
 ```r
 library(UZIMA)
 
 # Option A: SP + Key Vault (recommended — full SQL access)
 conn <- fabric_connect(auth = "sp_vault")
 
-# Option B: Device Code only (simpler — browser login)
+# Option B: Device Code only (browser login — OneLake access)
 conn <- fabric_connect(auth = "device_code")
 
-# Option C: Existing token (if you already have one)
+# Option C: Existing token
 conn <- fabric_connect(auth = "token", token = "eyJ...")
 
-# Option D: Read token from environment variable
-# (checks FABRIC_ACCESS_TOKEN, FABRIC_DELEGATED_ACCESS_TOKEN, AZURE_ACCESS_TOKEN)
+# Option D: Environment variable
 conn <- fabric_connect(auth = "env")
 ```
 
-### Python — Pick a method
-
+### Python
 ```python
 from fabricpy import FabricLakehouse
 
@@ -55,24 +52,18 @@ lh = FabricLakehouse()
 
 # Option B: Existing token
 lh = FabricLakehouse(access_token="eyJ...")
-
-# Option C: Read token from environment variable
-import os
-lh = FabricLakehouse(access_token=os.environ.get("FABRIC_ACCESS_TOKEN"))
 ```
 
 | Method | What happens | Best for |
 |--------|--------------|----------|
-| `sp_vault` | Browser login → Key Vault → SP → ODBC | Full SQL access |
+| `sp_vault` | az CLI → Key Vault → SP → ODBC SQL | Full SQL access |
 | `device_code` | Browser login → OneLake | Simple, quick |
-| `token` | Skip login, use your own token | Automation, sharing |
-| `env` | Read from `FABRIC_ACCESS_TOKEN` env var | CI/CD, scripts |
+| `token` | Skip login, use your own token | Automation |
+| `env` | Read from env var | CI/CD |
 
 ---
 
 ## Step 3: Explore Data
-
-These examples work **regardless** of which auth method you chose.
 
 ### List Tables
 
@@ -108,7 +99,7 @@ print(df.head())
 ```r
 result <- fabric_query(conn, "
   SELECT Gender, COUNT(*) AS total
-  FROM dbo.dimenrolledparticipants
+  FROM dimenrolledparticipants
   GROUP BY Gender
 ")
 print(result)
@@ -122,36 +113,23 @@ print(result)
 
 ### Disconnect
 
-**R:**
 ```r
 fabric_disconnect(conn)
-```
-
-**Python:**
-```python
-# No disconnect needed — Python handles cleanup automatically
 ```
 
 ---
 
 ## Available Data
 
-| Database | Tables | Description |
-|----------|--------|-------------|
-| `uzima_db_backup` | 31+ | Fitbit, surveys, participants |
-| `HCW_fitbit_data` | 5 | HCW fitbit activity logs |
-| `Qualtrics` | 1 | HCW student survey |
+| Database | Key Tables | Description |
+|----------|------------|-------------|
+| `uzima_db_backup` | `dimenrolledparticipants`, `factfitbitsleeplogs`, `dimsurveyresults` | Main study data |
+| `HCW_fitbit_data` | `factfitbitactivitieslogs`, `factfitbitdailydata` | HCW fitbit logs |
+| `Qualtrics` | `qualtrics_hcw_student_survey` | HCW student survey |
 
-**Switch database in R:**
+**Switch database:**
 ```r
 conn <- fabric_connect(auth = "sp_vault", database = "HCW_fitbit_data")
-# or
-conn <- fabric_connect(auth = "device_code", lakehouse = "HCW_fitbit_data")
-```
-
-**Switch database in Python:**
-```python
-lh = FabricLakehouse(lakehouse="HCW_fitbit_data")
 ```
 
 ---
@@ -160,10 +138,9 @@ lh = FabricLakehouse(lakehouse="HCW_fitbit_data")
 
 | Problem | Fix |
 |---------|-----|
-| Browser doesn't open | Run the script again — it will re-issue a device code |
-| "Access denied" | Contact derick.imbati@aku.edu to get whitelisted |
-| Install fails | Wait and retry (GitHub rate limit) |
-| `rm(list = ls())` warning | Safe to ignore — clears old functions |
+| Browser doesn't open | Run the script again |
+| "Access denied" | Contact derick.imbati@aku.edu |
+| "Invalid object name" | Table names are lowercase: `dimenrolledparticipants` not `DimEnrolledParticipants` |
 
 ## Support
 

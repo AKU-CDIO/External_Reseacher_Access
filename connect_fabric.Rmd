@@ -27,7 +27,8 @@ library(DBI)
 library(dplyr)
 library(processx)
 
-connect_to_fabric <- function() {
+# Databases: "uzima_db_backup" | "HCW_fitbit_data" | "Qualtrics"
+connect_to_fabric <- function(database = "uzima_db_backup") {
   vault_url <- "https://uzima-secrets-xfmh.vault.azure.net"
   server    <- "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
 
@@ -56,7 +57,7 @@ connect_to_fabric <- function() {
   stop_for_status(resp)
 
   dbConnect(odbc::odbc(), Driver = "ODBC Driver 18 for SQL Server",
-            Server = paste0(server, ",1433"), Database = "uzima_db_backup",
+            Server = paste0(server, ",1433"), Database = database,
             UID = 1, AccessToken = content(resp)$access_token,
             Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30)
 }
@@ -64,10 +65,12 @@ connect_to_fabric <- function() {
 
 ## Connect
 
-Run this chunk — a browser window opens for login.
+Change the database name if needed (see comment in function above).
 
 ```{r connect}
 con <- connect_to_fabric()
+# con <- connect_to_fabric("HCW_fitbit_data")
+# con <- connect_to_fabric("Qualtrics")
 cat("Connected!\n")
 ```
 

@@ -13,18 +13,27 @@ pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbou
 
 ### R
 ```r
+install.packages(c("httr", "jsonlite", "odbc", "DBI"))
 remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
 ```
 
-## Auth Flow
+## Auth Flow (Explicit)
 
-1. Run any example → browser opens automatically
-2. Sign in with your **external email** (e.g. Gmail, Outlook.com)
-3. Complete MFA if prompted
-4. Token cached locally — subsequent runs skip sign-in
-5. Token expires after ~1 hour → re-authenticate automatically
+Every connection follows this 4-step chain:
 
-**No Azure CLI, no Service Principal, no Key Vault required.**
+```
+Device Code (browser)  →  Key Vault  →  Service Principal  →  ODBC SQL
+     Step 1                 Step 2           Step 3              Step 4
+```
+
+| Step | What Happens | Why |
+|------|--------------|-----|
+| 1 | Browser opens → sign in with your email | MFA + external identity |
+| 2 | Token fetches SP creds from Key Vault | Secrets never leave Azure |
+| 3 | SP creds → SQL access token | Fabric SQL endpoint auth |
+| 4 | SQL token → ODBC connection | Query data with standard SQL |
+
+**No Azure CLI required.** The `fabriconnect` package handles device code flow internally.
 
 ## Python
 
@@ -49,21 +58,52 @@ print(result)
 ## R
 
 ```r
+library(httr)
+library(jsonlite)
+library(odbc)
+library(DBI)
 library(fabriconnect)
 
-conn <- connect_to_fabric()
+# Step 1: Device code → browser login → get token
+cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
+token <- fabriconnect:::.get_fabric_token(cfg$fabric_tenant)
 
-# List tables
-tables <- list_tables(conn)
-print(tables)
+# Step 2: Token → Key Vault → get SP credentials
+VAULT_URL <- "https://uzima-secrets-xfmh.vault.azure.net"
+fetch_secret <- function(name) {
+  url <- paste0(VAULT_URL, "/secrets/", name, "?api-version=7.4")
+  resp <- GET(url, add_headers(Authorization = paste("Bearer", token)))
+  stop_for_status(resp)
+  content(resp)$value
+}
 
-# Read a table
-df <- read_table(conn, "dimenrolledparticipants")
-print(head(df))
+tenant_id     <- fetch_secret("fabric-sp-tenant-id")
+client_id     <- fetch_secret("fabric-sp-client-id")
+client_secret <- fetch_secret("fabric-sp-client-secret")
 
-# SQL query
-result <- query_tables(conn, "SELECT COUNT(*) AS total FROM dimenrolledparticipants")
-print(result)
+# Step 3: SP credentials → SQL token
+resp <- POST(
+  paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token"),
+  body = list(grant_type = "client_credentials", client_id = client_id,
+              client_secret = client_secret, scope = "https://database.windows.net/.default"),
+  encode = "form"
+)
+stop_for_status(resp)
+sql_token <- content(resp)$access_token
+
+# Step 4: SQL token → ODBC connection
+con <- dbConnect(
+  odbc::odbc(),
+  Driver = "ODBC Driver 18 for SQL Server",
+  Server = "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com,1433",
+  Database = "uzima_db_backup",
+  UID = 1, AccessToken = sql_token,
+  Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30
+)
+
+# Query
+dbGetQuery(con, "SELECT COUNT(*) AS total FROM dbo.dimenrolledparticipants")
+dbDisconnect(con)
 ```
 
 ## Available Data
@@ -74,24 +114,16 @@ print(result)
 | `HCW_fitbit_data` | 5 | HCW fitbit activity logs |
 | `Qualtrics` | 1 | HCW student survey |
 
-To use a different database:
-
-```python
-lh = FabricLakehouse(lakehouse="HCW_fitbit_data")
-```
-
-```r
-conn <- connect_to_fabric(lakehouse = "HCW_fitbit_data")
-```
+To use a different database, change `Database = "HCW_fitbit_data"` in the connection.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| "No authentication method available" | Run the script again — browser will open for sign-in |
+| Browser doesn't open | Run the script again — device code will re-issue |
 | "Access denied" | Contact derick.imbati@aku.edu to get whitelisted |
 | Install fails | Wait and retry (GitHub rate limit) |
-| `rm(list = ls())` warning | Safe to ignore — clears old functions that might mask package versions |
+| `rm(list = ls())` warning | Safe to ignore — clears old functions that mask package versions |
 
 ## Support
 

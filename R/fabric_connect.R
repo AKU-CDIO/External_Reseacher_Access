@@ -37,9 +37,9 @@ fabric_connect <- function(
     return(fabriconnect::connect_to_fabric(access_token = token_val))
   }
 
-  # Device code → browser login → get OneLake token
+  # Device code → browser login → get tokens
   cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
-  onelake_token <- fabriconnect:::.get_fabric_token(cfg$fabric_tenant)
+  tenant <- cfg$fabric_tenant
 
   if (auth == "device_code") {
     if (!is.null(lakehouse)) {
@@ -49,10 +49,17 @@ fabric_connect <- function(
   }
 
   # auth == "sp_vault"
+  # Get token for Key Vault (different resource than OneLake)
+  kv_token <- fabriconnect:::.try_msal_device_code(tenant, "https://vault.azure.net")
+  if (is.null(kv_token)) {
+    stop("Failed to authenticate for Key Vault. Run again and sign in when prompted.")
+  }
+  kv_access_token <- kv_token$access_token
+
   # Step 2: Token → Key Vault → get SP credentials
   fetch_secret <- function(name) {
     url <- paste0(vault_url, "/secrets/", name, "?api-version=7.4")
-    resp <- httr::GET(url, httr::add_headers(Authorization = paste("Bearer", onelake_token)))
+    resp <- httr::GET(url, httr::add_headers(Authorization = paste("Bearer", kv_access_token)))
     httr::stop_for_status(resp)
     httr::content(resp)$value
   }

@@ -10,6 +10,7 @@ source("fabric_connect.R")
 # Choose your auth:
 conn <- fabric_connect(auth = "sp_vault")
 # conn <- fabric_connect(auth = "device_code")
+# conn <- fabric_connect(auth = "env")
 
 # SQL JOIN: Sleep summary per participant
 cat("Sleep summary per participant (top 10):\n\n")

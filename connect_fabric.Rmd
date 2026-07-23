@@ -25,6 +25,7 @@ source("fabric_connect.R")
 # Pick one:
 conn <- fabric_connect(auth = "sp_vault")
 # conn <- fabric_connect(auth = "device_code")
+# conn <- fabric_connect(auth = "env")
 ```
 
 ## List Tables

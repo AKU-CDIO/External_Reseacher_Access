@@ -82,31 +82,18 @@ fabric_connect <- function(
   client_id     <- fetch_secret("fabric-sp-client-id")
   client_secret <- fetch_secret("fabric-sp-client-secret")
 
-  # Step 3: SP credentials → SQL token
-  resp <- httr::POST(
-    paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token"),
-    body = list(
-      grant_type    = "client_credentials",
-      client_id     = client_id,
-      client_secret = client_secret,
-      scope         = "https://database.windows.net/.default"
-    ),
-    encode = "form"
-  )
-  httr::stop_for_status(resp)
-  sql_token <- httr::content(resp)$access_token
-
-  # Step 4: SQL token → ODBC connection
+  # Step 4: ODBC connection — driver handles token via SP creds
   con <- DBI::dbConnect(
     odbc::odbc(),
-    Driver      = "ODBC Driver 18 for SQL Server",
-    Server      = paste0(server, ",1433"),
-    Database    = database,
-    UID         = 1,
-    AccessToken = sql_token,
-    Encrypt     = "yes",
-    TrustServerCertificate = "no",
-    Timeout     = 30
+    Driver                   = "ODBC Driver 18 for SQL Server",
+    Server                   = paste0(server, ",1433"),
+    Database                 = database,
+    Authentication           = "ActiveDirectoryServicePrincipal",
+    UID                      = client_id,
+    pwd                      = client_secret,
+    Encrypt                  = "yes",
+    TrustServerCertificate   = "no",
+    Timeout                  = 30
   )
 
   attr(con, "auth_type") <- "sp_vault"

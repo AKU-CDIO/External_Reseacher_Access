@@ -130,7 +130,9 @@ fabric_list_tables <- function(conn) {
 #' @export
 fabric_read_table <- function(conn, table_name) {
   if (inherits(conn, "DBIConnection")) {
-    DBI::dbReadTable(conn, paste0("dbo.", table_name))
+    # Query without quotes so SQL Server handles case-insensitive matching
+    sql <- paste0("SELECT * FROM ", table_name)
+    DBI::dbGetQuery(conn, sql)
   } else if (inherits(conn, "fabric_connection")) {
     fabriconnect::read_table(conn, table_name)
   } else {

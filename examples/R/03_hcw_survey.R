@@ -1,99 +1,31 @@
-# ============================================================================
-# Example 3: HCW Student Survey Analysis
-#
-# Equivalent to: examples/HCW_Survey.R (from fabric-inbound-access repo)
-# But uses ODBC via Key Vault instead of fabriconnect package.
-#
-# Prerequisites:
-#   install.packages(c("httr", "jsonlite", "odbc", "DBI", "AzureAuth", "dplyr"))
-#   ODBC Driver 18 for SQL Server
-# ============================================================================
+# UZIMA Fabric SQL — SQL JOINs
+# remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
 
-rm(list = ls())
+library(fabriconnect)
 
-library(httr)
-library(jsonlite)
-library(odbc)
-library(DBI)
-library(dplyr)
+conn <- connect_to_fabric()
 
-# ---- Config ----
-KV_TENANT_ID <- "4fde8ff3-4dd5-42e1-a25a-e42905610d66"
-VAULT_URL    <- "https://uzima-secrets-xfmh.vault.azure.net"
-SERVER       <- "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
-DATABASE     <- "uzima_db_backup"
+# Sleep summary per participant
+sleep <- query_tables(conn, "
+  SELECT p.ParticipantIdentifier, p.Gender,
+         COUNT(*) AS sleep_logs,
+         AVG(s.MinutesAsleep) AS avg_sleep
+  FROM dimenrolledparticipants p
+  JOIN factfitbitsleeplogs s ON p.ParticipantIdentifier = s.ParticipantIdentifier
+  GROUP BY p.ParticipantIdentifier, p.Gender
+  ORDER BY sleep_logs DESC
+")
+cat("Sleep summary (top 10):\n\n")
+print(head(sleep, 10))
 
-# ---- Authenticate to Key Vault (browser opens) ----
-token_kv <- AzureAuth::get_azure_token(
-  resource = "https://vault.azure.net",
-  tenant   = KV_TENANT_ID,
-  app      = "04b07795-c8b7-4bab-9fb9-464329ae7e9e",
-  auth_type = "device_code",
-  use_cache = FALSE
-)
+# Demographics
+demo <- query_tables(conn, "
+  SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age
+  FROM dimenrolledparticipants
+  WHERE Gender IS NOT NULL
+  GROUP BY Gender
+")
+cat("\nDemographics:\n\n")
+print(demo)
 
-# ---- Fetch SP credentials from Key Vault ----
-fetch_secret <- function(vault_url, secret_name, token) {
-  url <- paste0(vault_url, "/secrets/", secret_name, "?api-version=7.4")
-  resp <- GET(url, add_headers(Authorization = paste("Bearer", token$credentials$access_token)))
-  stop_for_status(resp)
-  content(resp)$value
-}
-
-tenant_id     <- fetch_secret(VAULT_URL, "fabric-sp-tenant-id", token_kv)
-client_id     <- fetch_secret(VAULT_URL, "fabric-sp-client-id", token_kv)
-client_secret <- fetch_secret(VAULT_URL, "fabric-sp-client-secret", token_kv)
-
-# ---- Get Fabric SQL token via SP ----
-get_sp_token <- function(tenant_id, client_id, client_secret) {
-  url <- paste0("https://login.microsoftonline.com/", tenant_id, "/oauth2/v2.0/token")
-  body <- list(
-    grant_type    = "client_credentials",
-    client_id     = client_id,
-    client_secret = client_secret,
-    scope         = "https://database.windows.net/.default"
-  )
-  resp <- POST(url, body = body, encode = "form")
-  stop_for_status(resp)
-  content(resp)$access_token
-}
-
-token_sql <- get_sp_token(tenant_id, client_id, client_secret)
-
-# ---- Connect to Fabric SQL ----
-con <- dbConnect(
-  odbc::odbc(),
-  Driver      = "ODBC Driver 18 for SQL Server",
-  Server      = paste0(SERVER, ",1433"),
-  Database    = DATABASE,
-  UID         = 1,
-  AccessToken = token_sql,
-  Encrypt     = "yes",
-  TrustServerCertificate = "no",
-  Timeout     = 30
-)
-
-# ---- Read HCW Student Survey ----
-cat("Reading Qualtrics HCW Student Survey...\n\n")
-baseline <- dbReadTable(con, "dbo.Qualtrics_HCW_Student_Survey_View")
-cat("Rows:", nrow(baseline), " Cols:", ncol(baseline), "\n")
-
-# ---- Filter consented participants ----
-if ("Consent3" %in% names(baseline)) {
-  baseline_filtered <- baseline %>%
-    filter(Consent3 == 1)
-  cat("Consented:", nrow(baseline_filtered), "participants\n\n")
-
-  # Descriptives
-  cat("Age summary:\n")
-  print(summary(baseline_filtered$Age))
-
-  cat("\nGender distribution:\n")
-  print(table(baseline_filtered$Gender, useNA = "ifany"))
-} else {
-  cat("Column 'Consent3' not found. Available columns:\n")
-  print(names(baseline))
-}
-
-dbDisconnect(con)
-cat("\nDone.\n")
+dbDisconnect(conn)

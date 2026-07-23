@@ -1,145 +1,92 @@
 # UZIMA External Researcher Data Access
 
-Access UZIMA study data from Microsoft Fabric on your personal machine — **no VM needed**.
+Access UZIMA study data from Microsoft Fabric on your personal machine.
 
-## Quick Start
-
-### Python (Jupyter / VS Code)
-
-```bash
-pip install pandas pyodbc azure-identity azure-keyvault-secrets
-```
-
-```python
-from examples.python.fabric_helpers import get_connection, list_tables, read_table
-
-conn = get_connection()
-tables = list_tables(conn)
-print(tables)
-
-df = read_table(conn, "dbo.DimenrolledParticipants")
-print(df.head())
-```
-
-### R / RStudio
-
-```r
-install.packages(c("httr", "jsonlite", "odbc", "DBI", "AzureAuth", "dplyr"))
-```
-
-Open `connect_fabric.Rmd` in RStudio and click **Knit**. A browser window will open for login.
-
-## How It Works
-
-1. You log in with your browser (one-time)
-2. The script fetches service credentials from Azure Key Vault
-3. Those credentials connect you to Fabric SQL
-4. You query data like any other database
-
-**No passwords stored on your machine. No special software to install.**
-
-## What's Included
-
-| File | What it does |
-|------|-------------|
-| `connect_and_read.py` | Python — connect and list tables |
-| `connect_fabric.Rmd` | R — connect and query data |
-| `examples/python/` | More Python examples (read tables, SQL queries, JOINs) |
-| `examples/R/` | More R examples (JOINs, demographics, survey analysis) |
-| `docs/FABRIC_SP_ACCESS_SETUP.md` | Admin setup documentation |
-
-## Examples
-
-### List all tables
-```python
-# Python
-from examples.python.fabric_helpers import get_connection, list_tables
-conn = get_connection()
-print(list_tables(conn))
-```
-
-### Read a specific table
-```python
-from examples.python.fabric_helpers import get_connection, read_table
-conn = get_connection()
-df = read_table(conn, "dbo.DimenrolledParticipants", columns=["ParticipantIdentifier", "Gender", "Age"])
-print(df.head())
-```
-
-### Run a SQL query
-```python
-from examples.python.fabric_helpers import get_connection, query_sql
-conn = get_connection()
-result = query_sql(conn, "SELECT COUNT(*) FROM dbo.DimenrolledParticipants")
-print(result)
-```
-
-### SQL JOIN across tables
-```python
-from examples.python.fabric_helpers import get_connection, query_sql
-conn = get_connection()
-df = query_sql(conn, """
-    SELECT p.ParticipantIdentifier, p.Gender,
-           AVG(s.MinutesAsleep) AS avg_sleep
-    FROM dbo.DimenrolledParticipants p
-    JOIN dbo.FactFitBitSleepLog s ON p.ParticipantIdentifier = s.ParticipantIdentifier
-    GROUP BY p.ParticipantIdentifier, p.Gender
-""")
-print(df.head(10))
-```
-
-## Available Data
-
-| Lakehouse | Tables | Description |
-|-----------|--------|-------------|
-| `uzima_db_backup` | 31 | Fitbit, surveys, participants |
-| `HCW_fitbit_data` | 5 | HCW fitbit activity logs |
-| `Qualtrics` | 1 | HCW student survey (256 columns) |
+> **No repo clone needed.** Copy any code block below and run it.
 
 ## Prerequisites
 
-### Azure CLI (required for login)
-
-Install `az` CLI — this handles your browser login.
-
-| Platform | Install |
-|----------|---------|
-| **Windows** | [Download MSI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-windows?tabs=ms-cli) |
-| **macOS** | `brew install azure-cli` or [Download PKG](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-macos) |
-| **Linux** | `curl -sL https://aka.ms/InstallAzureCLIDeb \| sudo bash` |
-
-After installing, run in a terminal:
-```bash
-az login
-```
-
-### ODBC Driver 18 (required for database connection)
-
-| Platform | Install |
-|----------|---------|
-| **Windows** | [Download MSI](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) |
-| **macOS** | `brew install msodbcsql18 mssql-tools18` or [Homebrew tap](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-driver-odbc-sql-server-macos) |
-| **Linux (Ubuntu/Debian)** | `sudo apt-get install -y msodbcsql18` |
-
 ### Python
 ```bash
-pip install pandas pyodbc azure-identity azure-keyvault-secrets
+pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbound-access.git#subdirectory=fabriconnectpy"
 ```
 
 ### R
 ```r
-install.packages(c("httr", "jsonlite", "odbc", "DBI", "dplyr", "processx"))
+remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
+```
+
+## Python
+
+```python
+from fabricpy import FabricLakehouse
+
+lh = FabricLakehouse()
+
+# List tables
+tables = lh.list_tables()
+print(tables)
+
+# Read a table
+df = lh.to_pandas("dimenrolledparticipants")
+print(df.head())
+
+# SQL query
+result = lh.sql("SELECT COUNT(*) AS total FROM dimenrolledparticipants")
+print(result)
+```
+
+## R
+
+```r
+library(fabriconnect)
+
+conn <- connect_to_fabric()
+
+# List tables
+tables <- list_tables(conn)
+print(tables)
+
+# Read a table
+df <- read_table(conn, "dimenrolledparticipants")
+print(head(df))
+
+# SQL query
+result <- query_tables(conn, "SELECT COUNT(*) AS total FROM dimenrolledparticipants")
+print(result)
+```
+
+## How it works
+
+1. First run: browser opens → sign in with your email
+2. Token cached for next runs
+3. Data loads — query it like any SQL database
+
+## Available Data
+
+| Database | Tables | Description |
+|----------|--------|-------------|
+| `uzima_db_backup` | 31+ | Fitbit, surveys, participants |
+| `HCW_fitbit_data` | 5 | HCW fitbit activity logs |
+| `Qualtrics` | 1 | HCW student survey |
+
+To use a different database:
+
+```python
+lh = FabricLakehouse(lakehouse="HCW_fitbit_data")
+```
+
+```r
+conn <- connect_to_fabric(lakehouse = "HCW_fitbit_data")
 ```
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| Browser doesn't open | Make sure you have a default browser set |
-| "ODBC Driver not found" | Install ODBC Driver 18 from [Microsoft](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) |
-| "Run 'az login' first" | Open a terminal and run `az login` |
-| "Access denied" | Contact Derick (derick.imbati@aku.edu) to get whitelisted |
-| Connection timeout | Check your internet connection and try again |
+| "No authentication method available" | Run the script again — browser will open for sign-in |
+| "Access denied" | Contact derick.imbati@aku.edu to get whitelisted |
+| Install fails | Wait and retry (GitHub rate limit) |
 
 ## Support
 

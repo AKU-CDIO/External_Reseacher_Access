@@ -1,63 +1,28 @@
 """
-Example 3: SQL JOIN across tables
-Fully standalone — copy this file and run it.
+UZIMA Fabric SQL — SQL JOINs
+pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbound-access.git#subdirectory=fabriconnectpy"
 """
+from fabricpy import FabricLakehouse
 
-import struct
-import pandas as pd
-import pyodbc
-from azure.identity import AzureCliCredential, ClientSecretCredential
-from azure.keyvault.secrets import SecretClient
-
-def connect_to_fabric():
-    vault_url = "https://uzima-secrets-xfmh.vault.azure.net"
-    kv_tenant = "4fde8ff3-4dd5-42e1-a25a-e42905610d66"
-    server    = "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
-
-    kv_client = SecretClient(vault_url, AzureCliCredential(tenant_id=kv_tenant))
-    tenant_id = kv_client.get_secret("fabric-sp-tenant-id").value
-    client_id = kv_client.get_secret("fabric-sp-client-id").value
-    client_secret = kv_client.get_secret("fabric-sp-client-secret").value
-
-    token = ClientSecretCredential(tenant_id, client_id, client_secret
-        ).get_token("https://database.windows.net/.default").token
-
-    token_bytes = token.encode("utf-16-le")
-    token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
-
-    conn_str = (
-        "Driver={ODBC Driver 18 for SQL Server};"
-        f"Server=tcp:{server},1433;"
-        "Database=uzima_db_backup;"
-        "Encrypt=yes;TrustServerCertificate=no;"
-    )
-    return pyodbc.connect(conn_str, attrs_before={1256: token_struct}, timeout=30)
-
-
-conn = connect_to_fabric()
+lh = FabricLakehouse()
 
 # Sleep summary per participant
-result = pd.read_sql_query("""
-    SELECT p.ParticipantIdentifier, p.Gender, p.Age,
+result = lh.sql("""
+    SELECT p.ParticipantIdentifier, p.Gender,
            COUNT(*) AS sleep_logs,
            AVG(s.MinutesAsleep) AS avg_sleep
-    FROM dbo.dimenrolledparticipants p
-    JOIN dbo.factfitbitsleeplogs s ON p.ParticipantIdentifier = s.ParticipantIdentifier
-    GROUP BY p.ParticipantIdentifier, p.Gender, p.Age
+    FROM dimenrolledparticipants p
+    JOIN factfitbitsleeplogs s ON p.ParticipantIdentifier = s.ParticipantIdentifier
+    GROUP BY p.ParticipantIdentifier, p.Gender
     ORDER BY sleep_logs DESC
-""", conn)
-print("Sleep summary (top 10):\n")
-print(result.head(10))
+""")
+print("Sleep summary (top 10):\n", result.head(10))
 
 # Demographics
-demo = pd.read_sql_query("""
-    SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age,
-           MIN(Age) AS min_age, MAX(Age) AS max_age
-    FROM dbo.dimenrolledparticipants
+demo = lh.sql("""
+    SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age
+    FROM dimenrolledparticipants
     WHERE Gender IS NOT NULL
     GROUP BY Gender
-""", conn)
-print("\nDemographics:\n")
-print(demo)
-
-conn.close()
+""")
+print("\nDemographics:\n", demo)

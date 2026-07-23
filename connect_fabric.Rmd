@@ -12,88 +12,37 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ## Setup (one-time)
 
 ```r
-install.packages(c("httr", "jsonlite", "odbc", "DBI", "dplyr", "processx"))
-```
-
-Also install **ODBC Driver 18** for SQL Server and **Azure CLI** (`az`).
-
-## Define connection function
-
-```{r define}
-library(httr)
-library(jsonlite)
-library(odbc)
-library(DBI)
-library(dplyr)
-library(processx)
-
-# Databases: "uzima_db_backup" | "HCW_fitbit_data" | "Qualtrics"
-connect_to_fabric <- function(database = "uzima_db_backup") {
-  vault_url <- "https://uzima-secrets-xfmh.vault.azure.net"
-  server    <- "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com"
-
-  az_token <- function(resource) {
-    r <- processx::run("az", c("account", "get-access-token", "--resource", resource, "--output", "json"),
-                       error_on_status = FALSE)
-    if (r$status != 0) stop("Run 'az login' first in a terminal.")
-    fromJSON(r$stdout)$accessToken
-  }
-
-  get_secret <- function(name) {
-    tok <- az_token("https://vault.azure.net")
-    resp <- GET(paste0(vault_url, "/secrets/", name, "?api-version=7.4"),
-                add_headers(Authorization = paste("Bearer", tok)))
-    stop_for_status(resp); content(resp)$value
-  }
-
-  tid  <- get_secret("fabric-sp-tenant-id")
-  cid  <- get_secret("fabric-sp-client-id")
-  csec <- get_secret("fabric-sp-client-secret")
-
-  resp <- POST(paste0("https://login.microsoftonline.com/", tid, "/oauth2/v2.0/token"),
-               body = list(grant_type = "client_credentials", client_id = cid,
-                           client_secret = csec, scope = "https://database.windows.net/.default"),
-               encode = "form")
-  stop_for_status(resp)
-
-  dbConnect(odbc::odbc(), Driver = "ODBC Driver 18 for SQL Server",
-            Server = paste0(server, ",1433"), Database = database,
-            UID = 1, AccessToken = content(resp)$access_token,
-            Encrypt = "yes", TrustServerCertificate = "no", Timeout = 30)
-}
+remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
 ```
 
 ## Connect
 
-Change the database name if needed (see comment in function above).
-
 ```{r connect}
-con <- connect_to_fabric()
-# con <- connect_to_fabric("HCW_fitbit_data")
-# con <- connect_to_fabric("Qualtrics")
+library(fabriconnect)
+conn <- connect_to_fabric()
 cat("Connected!\n")
 ```
 
 ## List Tables
 
 ```{r list-tables}
-tables <- dbGetQuery(con, "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA, TABLE_NAME")
-knitr::kable(tables)
+tables <- list_tables(conn)
+knitr::kable(data.frame(Table = tables))
 ```
 
 ## Read Data
 
 ```{r read-data}
-df <- dbGetQuery(con, "SELECT TOP 10 * FROM dbo.dimenrolledparticipants")
-knitr::kable(df)
+df <- read_table(conn, "dimenrolledparticipants")
+knitr::kable(head(df))
 ```
 
 ## SQL Queries
 
 ```{r sql}
-result <- dbGetQuery(con, "
+result <- query_tables(conn, "
   SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age
-  FROM dbo.dimenrolledparticipants
+  FROM dimenrolledparticipants
   WHERE Gender IS NOT NULL
   GROUP BY Gender
 ")
@@ -103,5 +52,5 @@ knitr::kable(result, caption = "Demographics")
 ## Disconnect
 
 ```{r disconnect}
-dbDisconnect(con)
+dbDisconnect(conn)
 ```

@@ -18,6 +18,7 @@ remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect
 ## Connect
 
 ```{r connect}
+rm(list = ls())
 library(fabriconnect)
 conn <- connect_to_fabric()
 cat("Connected!\n")
@@ -47,10 +48,4 @@ result <- query_tables(conn, "
   GROUP BY Gender
 ")
 knitr::kable(result, caption = "Demographics")
-```
-
-## Disconnect
-
-```{r disconnect}
-dbDisconnect(conn)
 ```

@@ -16,6 +16,16 @@ pip install "fabricpy[pandas,sql] @ git+https://github.com/AKU-CDIO/fabric-inbou
 remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
 ```
 
+## Auth Flow
+
+1. Run any example → browser opens automatically
+2. Sign in with your **external email** (e.g. Gmail, Outlook.com)
+3. Complete MFA if prompted
+4. Token cached locally — subsequent runs skip sign-in
+5. Token expires after ~1 hour → re-authenticate automatically
+
+**No Azure CLI, no Service Principal, no Key Vault required.**
+
 ## Python
 
 ```python
@@ -56,12 +66,6 @@ result <- query_tables(conn, "SELECT COUNT(*) AS total FROM dimenrolledparticipa
 print(result)
 ```
 
-## How it works
-
-1. First run: browser opens → sign in with your email
-2. Token cached for next runs
-3. Data loads — query it like any SQL database
-
 ## Available Data
 
 | Database | Tables | Description |
@@ -87,6 +91,7 @@ conn <- connect_to_fabric(lakehouse = "HCW_fitbit_data")
 | "No authentication method available" | Run the script again — browser will open for sign-in |
 | "Access denied" | Contact derick.imbati@aku.edu to get whitelisted |
 | Install fails | Wait and retry (GitHub rate limit) |
+| `rm(list = ls())` warning | Safe to ignore — clears old functions that might mask package versions |
 
 ## Support
 

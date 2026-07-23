@@ -1,31 +1,35 @@
-# UZIMA Fabric SQL — SQL JOINs
-# remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect", force = TRUE)
+# ============================================================================
+# Example 3: HCW Student Survey Analysis
+# Prerequisites: remotes::install_github("AKU-CDIO/fabric-inbound-access", subdir = "fabriconnect")
+# ============================================================================
 
+rm(list = ls())
 library(fabriconnect)
+library(dplyr)
 
-conn <- connect_to_fabric()
+# Connect to HCW fitbit lakehouse (has the survey data)
+conn <- connect_to_fabric(lakehouse = "HCW_fitbit_data")
 
-# Sleep summary per participant
-sleep <- query_tables(conn, "
-  SELECT p.ParticipantIdentifier, p.Gender,
-         COUNT(*) AS sleep_logs,
-         AVG(s.MinutesAsleep) AS avg_sleep
-  FROM dimenrolledparticipants p
-  JOIN factfitbitsleeplogs s ON p.ParticipantIdentifier = s.ParticipantIdentifier
-  GROUP BY p.ParticipantIdentifier, p.Gender
-  ORDER BY sleep_logs DESC
-")
-cat("Sleep summary (top 10):\n\n")
-print(head(sleep, 10))
+# ---- Read HCW Student Survey ----
+cat("Reading Qualtrics HCW Student Survey...\n\n")
+baseline <- read_table(conn, "qualtrics_hcw_student_survey")
+cat("Rows:", nrow(baseline), " Cols:", ncol(baseline), "\n")
 
-# Demographics
-demo <- query_tables(conn, "
-  SELECT Gender, COUNT(*) AS total, AVG(Age) AS avg_age
-  FROM dimenrolledparticipants
-  WHERE Gender IS NOT NULL
-  GROUP BY Gender
-")
-cat("\nDemographics:\n\n")
-print(demo)
+# ---- Filter consented participants ----
+if ("Consent3" %in% names(baseline)) {
+  baseline_filtered <- baseline %>%
+    filter(Consent3 == 1)
+  cat("Consented:", nrow(baseline_filtered), "participants\n\n")
 
-dbDisconnect(conn)
+  # Descriptives
+  cat("Age summary:\n")
+  print(summary(baseline_filtered$Age))
+
+  cat("\nGender distribution:\n")
+  print(table(baseline_filtered$Gender, useNA = "ifany"))
+} else {
+  cat("Column 'Consent3' not found. Available columns:\n")
+  print(names(baseline))
+}
+
+cat("\nDone.\n")

@@ -13,7 +13,7 @@
 #' @return A database connection (DBIConnection) or Fabric connection (fabric_connection)
 #' @export
 fabric_connect <- function(
-  auth       = c("sp_vault", "device_code", "token", "env"),
+  auth       = c("env", "sp_vault", "device_code", "token"),
   token      = NULL,
   database   = "uzima_db_backup",
   vault_url  = "https://uzima-secrets-xfmh.vault.azure.net",

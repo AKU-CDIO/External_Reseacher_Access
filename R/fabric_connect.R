@@ -50,8 +50,14 @@ fabric_connect <- function(
 
   # auth == "sp_vault"
   # Try az CLI first (works with external identities), fallback to device code
+  az_cmd <- if (file.exists("C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/az.cmd")) {
+    "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/az.cmd"
+  } else {
+    "az"
+  }
+
   get_kv_token <- function() {
-    r <- processx::run("az", c("account", "get-access-token", "--resource", "https://vault.azure.net", "--output", "json"),
+    r <- processx::run(az_cmd, c("account", "get-access-token", "--resource", "https://vault.azure.net", "--output", "json"),
                        error_on_status = FALSE)
     if (r$status == 0) {
       return(jsonlite::fromJSON(r$stdout)$accessToken)

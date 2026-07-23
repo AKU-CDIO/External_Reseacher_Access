@@ -38,6 +38,10 @@ conn <- fabric_connect(auth = "device_code")
 
 # Option C: Existing token (if you already have one)
 conn <- fabric_connect(auth = "token", token = "eyJ...")
+
+# Option D: Read token from environment variable
+# (checks FABRIC_ACCESS_TOKEN, FABRIC_DELEGATED_ACCESS_TOKEN, AZURE_ACCESS_TOKEN)
+conn <- fabric_connect(auth = "env")
 ```
 
 ### Python — Pick a method
@@ -50,6 +54,10 @@ lh = FabricLakehouse()
 
 # Option B: Existing token
 lh = FabricLakehouse(access_token="eyJ...")
+
+# Option C: Read token from environment variable
+import os
+lh = FabricLakehouse(access_token=os.environ.get("FABRIC_ACCESS_TOKEN"))
 ```
 
 | Method | What happens | Best for |
@@ -57,6 +65,7 @@ lh = FabricLakehouse(access_token="eyJ...")
 | `sp_vault` | Browser login → Key Vault → SP → ODBC | Full SQL access |
 | `device_code` | Browser login → OneLake | Simple, quick |
 | `token` | Skip login, use your own token | Automation, sharing |
+| `env` | Read from `FABRIC_ACCESS_TOKEN` env var | CI/CD, scripts |
 
 ---
 

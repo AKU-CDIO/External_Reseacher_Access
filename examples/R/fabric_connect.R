@@ -4,7 +4,8 @@
 # Usage:
 #   conn <- fabric_connect(auth = "sp_vault")       # Device Code → Key Vault → SP → ODBC
 #   conn <- fabric_connect(auth = "device_code")    # Device Code → OneLake
-#   conn <- fabric_connect(auth = "token", token = "eyJ...")  # Existing token
+#   conn <- fabric_connect(auth = "token", token = "eyJ...")  # Explicit token
+#   conn <- fabric_connect(auth = "env")            # Read from env var
 #
 # Exploration (works with any connection):
 #   fabric_list_tables(conn)
@@ -20,14 +21,29 @@ library(DBI)
 library(fabriconnect)
 
 fabric_connect <- function(
-  auth       = c("sp_vault", "device_code", "token"),
+  auth       = c("sp_vault", "device_code", "token", "env"),
   token      = NULL,
   database   = "uzima_db_backup",
   vault_url  = "https://uzima-secrets-xfmh.vault.azure.net",
   server     = "fis5jjpzajqe5fxqs4z3vlsjde-zgopmz6jacoezkc3hd6da52lpm.datawarehouse.fabric.microsoft.com",
-  lakehouse  = NULL
+  lakehouse  = NULL,
+  env_var    = c("FABRIC_ACCESS_TOKEN", "FABRIC_DELEGATED_ACCESS_TOKEN", "AZURE_ACCESS_TOKEN")
 ) {
   auth <- match.arg(auth)
+  env_var <- match.arg(env_var)
+
+  if (auth == "token") {
+    if (is.null(token)) stop("token = required when auth = 'token'")
+    return(connect_to_fabric(access_token = token))
+  }
+
+  if (auth == "env") {
+    token_val <- Sys.getenv(env_var, unset = "")
+    if (!nzchar(token_val)) {
+      stop("Environment variable '", env_var, "' is not set.")
+    }
+    return(connect_to_fabric(access_token = token_val))
+  }
 
   # Device code → browser login → get OneLake token
   cfg <- jsonlite::fromJSON(system.file("config.json", package = "fabriconnect"))
@@ -38,11 +54,6 @@ fabric_connect <- function(
       return(connect_to_fabric(lakehouse = lakehouse))
     }
     return(connect_to_fabric())
-  }
-
-  if (auth == "token") {
-    if (is.null(token)) stop("token = required when auth = 'token'")
-    return(connect_to_fabric(access_token = token))
   }
 
   # auth == "sp_vault"

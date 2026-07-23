@@ -98,9 +98,38 @@ print(df.head(10))
 
 ## Prerequisites
 
-- **ODBC Driver 18** for SQL Server ([install guide](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server))
-- **Python** 3.8+ or **R** 4.0+
-- Your email must be whitelisted by the admin
+### Azure CLI (required for login)
+
+Install `az` CLI — this handles your browser login.
+
+| Platform | Install |
+|----------|---------|
+| **Windows** | [Download MSI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-windows?tabs=ms-cli) |
+| **macOS** | `brew install azure-cli` or [Download PKG](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-macos) |
+| **Linux** | `curl -sL https://aka.ms/InstallAzureCLIDeb \| sudo bash` |
+
+After installing, run in a terminal:
+```bash
+az login
+```
+
+### ODBC Driver 18 (required for database connection)
+
+| Platform | Install |
+|----------|---------|
+| **Windows** | [Download MSI](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) |
+| **macOS** | `brew install msodbcsql18 mssql-tools18` or [Homebrew tap](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-driver-odbc-sql-server-macos) |
+| **Linux (Ubuntu/Debian)** | `sudo apt-get install -y msodbcsql18` |
+
+### Python
+```bash
+pip install pandas pyodbc azure-identity azure-keyvault-secrets
+```
+
+### R
+```r
+install.packages(c("httr", "jsonlite", "odbc", "DBI", "dplyr", "processx"))
+```
 
 ## Troubleshooting
 
@@ -108,6 +137,7 @@ print(df.head(10))
 |---------|-----|
 | Browser doesn't open | Make sure you have a default browser set |
 | "ODBC Driver not found" | Install ODBC Driver 18 from [Microsoft](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) |
+| "Run 'az login' first" | Open a terminal and run `az login` |
 | "Access denied" | Contact Derick (derick.imbati@aku.edu) to get whitelisted |
 | Connection timeout | Check your internet connection and try again |
 

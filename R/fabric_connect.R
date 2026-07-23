@@ -111,7 +111,9 @@ fabric_connect <- function(
 fabric_list_tables <- function(conn) {
   if (inherits(conn, "DBIConnection")) {
     result <- DBI::dbGetQuery(conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME")
-    result$TABLE_NAME
+    # Filter out internal views and materialized tables
+    tabs <- result$TABLE_NAME[!grepl("^(_vw_|_mat_|dm_|sys|exec_|managed_|external_|sql_pool|frequently|long_running)", result$TABLE_NAME, ignore.case = TRUE)]
+    tabs
   } else if (inherits(conn, "fabric_connection")) {
     fabriconnect::list_tables(conn)
   } else {

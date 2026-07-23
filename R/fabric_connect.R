@@ -49,12 +49,20 @@ fabric_connect <- function(
   }
 
   # auth == "sp_vault"
-  # Get token for Key Vault (different resource than OneLake)
-  kv_token <- fabriconnect:::.try_msal_device_code(tenant, "https://vault.azure.net")
-  if (is.null(kv_token)) {
-    stop("Failed to authenticate for Key Vault. Run again and sign in when prompted.")
+  # Try az CLI first (works with external identities), fallback to device code
+  get_kv_token <- function() {
+    r <- processx::run("az", c("account", "get-access-token", "--resource", "https://vault.azure.net", "--output", "json"),
+                       error_on_status = FALSE)
+    if (r$status == 0) {
+      return(jsonlite::fromJSON(r$stdout)$accessToken)
+    }
+    # Fallback: device code for Key Vault
+    kv_token <- fabriconnect:::.try_msal_device_code(tenant, "https://vault.azure.net")
+    if (!is.null(kv_token)) return(kv_token$access_token)
+    stop("Failed to get Key Vault token. Run 'az login' first or use auth='device_code'.")
   }
-  kv_access_token <- kv_token$access_token
+
+  kv_access_token <- get_kv_token()
 
   # Step 2: Token → Key Vault → get SP credentials
   fetch_secret <- function(name) {

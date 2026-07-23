@@ -22,7 +22,6 @@ fabric_connect <- function(
   env_var    = c("FABRIC_ACCESS_TOKEN", "FABRIC_DELEGATED_ACCESS_TOKEN", "AZURE_ACCESS_TOKEN")
 ) {
   auth <- match.arg(auth)
-  env_var <- match.arg(env_var)
 
   if (auth == "token") {
     if (is.null(token)) stop("token = required when auth = 'token'")
@@ -30,10 +29,23 @@ fabric_connect <- function(
   }
 
   if (auth == "env") {
-    token_val <- Sys.getenv(env_var, unset = "")
-    if (!nzchar(token_val)) {
-      stop("Environment variable '", env_var, "' is not set.")
+    # Check all env var names, use the first one found
+    token_val <- ""
+    used_var  <- ""
+    for (v in env_var) {
+      val <- Sys.getenv(v, unset = "")
+      if (nzchar(val)) {
+        token_val <- val
+        used_var  <- v
+        break
+      }
     }
+    if (!nzchar(token_val)) {
+      stop("None of the environment variables are set: ",
+           paste(env_var, collapse = ", "),
+           ". Set one of them with Sys.setenv() or setx.")
+    }
+    message("Using token from: ", used_var)
     return(fabriconnect::connect_to_fabric(access_token = token_val))
   }
 
